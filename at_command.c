@@ -331,41 +331,23 @@ EXPORT_DEF int at_enqueue_ussd(struct cpvt *cpvt, const char *code)
 	static const char cmd[] = "AT+CUSD=1,\"";
 	static const char cmd_end[] = "\",15\r";
 	at_queue_cmd_t at_cmd = ATQ_CMD_DECLARE_DYN(CMD_AT_CUSD);
-	ssize_t res;
-	int length;
+	size_t code_len = strlen(code);
+	size_t length = STRLEN(cmd) + code_len + STRLEN(cmd_end);
 	char buf[4096];
 
-	memcpy (buf, cmd, STRLEN(cmd));
-	length = STRLEN(cmd);
-	int code_len = strlen(code);
+	if (length >= sizeof(buf)) {
+		chan_dongle_err = E_UNKNOWN;
+		return -1;
+	}
 
-	// use 7 bit encoding. 15 is 00001111 in binary and means 'Language using the GSM 7 bit default alphabet; Language unspecified' accodring to GSM 23.038
-	uint16_t code16[code_len * 2];
-	uint8_t code_packed[4069];
-	res = utf8_to_ucs2(code, code_len, code16, sizeof(code16));
-	if (res < 0) {
-		chan_dongle_err = E_PARSE_UTF8;
-		return -1;
-	}
-	res = gsm7_encode(code16, res, code16);
-	if (res < 0) {
-		chan_dongle_err = E_ENCODE_GSM7;
-		return -1;
-	}
-	res = gsm7_pack(code16, res, (char*)code_packed, sizeof(code_packed), 0);
-	if (res < 0) {
-		chan_dongle_err = E_PACK_GSM7;
-		return -1;
-	}
-	res = (res + 1) / 2;
-	hexify(code_packed, res, buf + STRLEN(cmd));
-	length += res * 2;
+	memcpy(buf, cmd, STRLEN(cmd));
+	memcpy(buf + STRLEN(cmd), code, code_len);
+	memcpy(buf + STRLEN(cmd) + code_len, cmd_end, STRLEN(cmd_end) + 1);
 
-	memcpy(buf + length, cmd_end, STRLEN(cmd_end)+1);
-	length += STRLEN(cmd_end);
+	length = STRLEN(cmd) + code_len + STRLEN(cmd_end);
 
 	at_cmd.length = length;
-	at_cmd.data = ast_strdup (buf);
+	at_cmd.data = ast_strdup(buf);
 	if (!at_cmd.data) {
 		chan_dongle_err = E_UNKNOWN;
 		return -1;
@@ -377,7 +359,6 @@ EXPORT_DEF int at_enqueue_ussd(struct cpvt *cpvt, const char *code)
 	}
 	return 0;
 }
-
 
 /*!
  * \brief Enqueue a DTMF command

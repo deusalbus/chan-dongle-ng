@@ -1424,6 +1424,7 @@ static int at_response_cusd (struct pvt * pvt, char * str, size_t len)
 	int		type;
 	char*		cusd;
 	int		dcs;
+	int		original_dcs;
 	char		cusd_utf8_str[1024];
 	char		text_base64[16384];
 	char		typebuf[2];
@@ -1436,6 +1437,7 @@ static int at_response_cusd (struct pvt * pvt, char * str, size_t len)
 		ast_verb (1, "[%s] Error parsing CUSD: '%.*s'\n", PVT_ID(pvt), (int) len, str);
 		return -1;
 	}
+	original_dcs = dcs;
 
 	if(type < 0 || type >= (int)ITEMS_OF(types))
 	{
@@ -1456,7 +1458,14 @@ static int at_response_cusd (struct pvt * pvt, char * str, size_t len)
 	}
 
 	ast_verb (1, "[%s] USSD DCS=%d (0: gsm7, 1: ascii, 2: ucs2)\n", PVT_ID(pvt), dcs);
-	if (dcs == 0) { // GSM-7
+	if (original_dcs == 15) { // Modem already decoded the USSD text
+		res = strlen(cusd);
+		if (res > (ssize_t)sizeof(cusd_utf8_str) - 1) {
+			res = -1;
+		} else {
+			memcpy(cusd_utf8_str, cusd, res);
+		}
+	} else if (dcs == 0) { // GSM-7
 		uint16_t out_ucs2[1024];
 		int cusd_nibbles = unhex(cusd, (uint8_t*)cusd);
 		res = gsm7_unpack_decode(cusd, cusd_nibbles, out_ucs2, sizeof(out_ucs2) / 2, 0, 0, 0);
